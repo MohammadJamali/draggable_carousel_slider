@@ -16,12 +16,14 @@ class DraggableSlider extends StatefulWidget {
     super.key,
     required this.children,
     this.onPressed,
+    this.onChange,
     this.loop = false,
   });
 
   final List<Widget> children;
   final bool loop;
   final Function(int)? onPressed;
+  final Function(int)? onChange;
 
   @override
   State<DraggableSlider> createState() => _DraggableSliderState();
@@ -73,16 +75,18 @@ class _DraggableSliderState extends State<DraggableSlider> {
   }
 
   GestureDetector _buildItem(
-    int index,
-    DraggableSliderItemSettings targetState, [
-    DraggableSliderItemSettings? initialState,
-  ]) =>
+      int index,
+      DraggableSliderItemSettings targetState, [
+        DraggableSliderItemSettings? initialState,
+      ]) =>
       GestureDetector(
         key: ValueKey('$prefixKey$index-GestureDetector'),
         onTap: () => onItemPressed(index),
         child: DraggableSliderItem(
           key: ValueKey('$prefixKey$index-DraggableSliderItem'),
-          onRelease: onTopItemRemoved,
+          onRelease: (p0, p1) {
+            onTopItemRemoved.call(p0,p1,index);
+          },
           onReleased: onTopItemAnimationStatusChanged,
           settings: targetState,
           initialSettings: initialState,
@@ -104,8 +108,8 @@ class _DraggableSliderState extends State<DraggableSlider> {
 
     final selectedItems = lastItem - selectedItem;
     for (var globalIndex = selectedItem, localIndex = 0;
-        globalIndex < lastItem;
-        globalIndex++, localIndex++) {
+    globalIndex < lastItem;
+    globalIndex++, localIndex++) {
       DraggableSliderItemSettings? initialState, targetState;
 
       if (widget.children.length == 1) {
@@ -157,18 +161,25 @@ class _DraggableSliderState extends State<DraggableSlider> {
   void onTopItemAnimationStatusChanged(Key? key) {
     if (children.any((element) => element.child?.key == lastPopedItem)) {
       children.removeWhere(
-        (element) => element.child?.key == lastPopedItem,
+            (element) => element.child?.key == lastPopedItem,
       );
       lastPopedItem = null;
       setState(() {});
     }
   }
 
-  void onTopItemRemoved(Key? key, DragDirection direction) {
+  void onTopItemRemoved(Key? key, DragDirection direction,int index) {
     lastPopedItem = key;
     selectedItem += 1;
     children = _buildItems();
+    onItemChange(index);
     setState(() {});
+  }
+
+  void onItemChange(int index) {
+    if (widget?.onChange != null) {
+      widget?.onChange!(index);
+    }
   }
 
   void onItemPressed(int index) {

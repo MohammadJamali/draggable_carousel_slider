@@ -56,15 +56,15 @@ class DraggableSliderItemState extends State<DraggableSliderItem>
 
   @override
   void didChangeDependencies() {
-    _screenSize = MediaQuery.of(context).size;
+    _screenSize = MediaQuery
+        .of(context)
+        .size;
 
     super.didChangeDependencies();
   }
 
-  TickerFuture? _animateItem(
-    DraggableSliderItemSettings from,
-    DraggableSliderItemSettings to,
-  ) {
+  TickerFuture? _animateItem(DraggableSliderItemSettings from,
+      DraggableSliderItemSettings to,) {
     final initialState = _computeTransformMatrix(from);
     final finalState = _computeTransformMatrix(to);
     _tranformTween = Tween<Matrix4>(
@@ -97,6 +97,8 @@ class DraggableSliderItemState extends State<DraggableSliderItem>
 
     super.didUpdateWidget(oldWidget);
   }
+  Offset? _startPosition;
+  double _dragThreshold = 30.0;
 
   bool get draggable =>
       widget.settings.draggable && !_animationController.isAnimating;
@@ -105,21 +107,38 @@ class DraggableSliderItemState extends State<DraggableSliderItem>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _positionTween,
-      builder: (context, child) => Transform.translate(
-        offset: Offset(
-          (_isPositionAnimating ? _positionTween.value : _itemPosition).dx,
-          (_isPositionAnimating ? _positionTween.value : _itemPosition).dy,
-        ),
-        child: child!,
-      ),
+      builder: (context, child) =>
+          Transform.translate(
+            offset: Offset(
+              (_isPositionAnimating ? _positionTween.value : _itemPosition).dx,
+              (_isPositionAnimating ? _positionTween.value : _itemPosition).dy,
+            ),
+            child: child!,
+          ),
       child: GestureDetector(
-        onPanUpdate: onDragging,
-        onPanEnd: onDropped,
+        onPanStart: (details) {
+          _startPosition = details.localPosition;
+        },
+        onPanUpdate: (details) {
+          if (_startPosition != null) {
+            final distance = (_startPosition! - details.localPosition).distance;
+            onDragging.call(details);
+          }
+        },
+        onPanEnd: (details) {
+          if (_startPosition != null) {
+            final distance = (_startPosition! - details.localPosition).distance;
+            if (distance < _dragThreshold) {
+            } else {
+              onDropped.call(details);
+            }
+          }
+        },
         child: AnimatedBuilder(
           animation: _tranformTween,
           child: widget.child,
           builder: (context, child) => Transform(
-            transform: _tranformTween.value,
+            transform: (_tranformTween.value != null) ? _tranformTween.value : Matrix4.identity(),
             alignment: FractionalOffset.center,
             child: AnimatedContainer(
               key: key,
@@ -127,12 +146,12 @@ class DraggableSliderItemState extends State<DraggableSliderItem>
               decoration: BoxDecoration(
                 boxShadow: widget.settings.shadow
                     ? [
-                        const BoxShadow(
-                          color: Colors.black54,
-                          offset: Offset(0, 32),
-                          blurRadius: 32,
-                        )
-                      ]
+                  const BoxShadow(
+                    color: Colors.black54,
+                    offset: Offset(0, 32),
+                    blurRadius: 32,
+                  )
+                ]
                     : null,
               ),
               child: MeasureSize(
@@ -147,63 +166,68 @@ class DraggableSliderItemState extends State<DraggableSliderItem>
   }
 
   void onDropped(details) {
-    if (!draggable) return;
-    _itemGlobalPosition = null;
+    try {
+      if (!draggable) return;
+      _itemGlobalPosition = null;
 
-    final slope = (_itemPosition.dx / _itemPosition.dy).abs();
-    var targetPosition = Offset(
-      _itemPosition.dx.sign * _screenSize.width * slope,
-      _itemPosition.dy.sign * _screenSize.height * slope,
-    );
+      final slope = (_itemPosition.dx / _itemPosition.dy).abs();
+      var targetPosition = Offset(
+        _itemPosition.dx.sign * _screenSize.width * slope,
+        _itemPosition.dy.sign * _screenSize.height * slope,
+      );
 
-    final magnitude = targetPosition.distance;
-    final scaleFactor = magnitude / _screenSize.longestSide;
+      final magnitude = targetPosition.distance;
+      final scaleFactor = magnitude / _screenSize.longestSide;
 
-    targetPosition = Offset(
-      targetPosition.dx / scaleFactor,
-      targetPosition.dy / scaleFactor,
-    );
+      targetPosition = Offset(
+        targetPosition.dx / scaleFactor,
+        targetPosition.dy / scaleFactor,
+      );
 
-    final direction =
-        _itemPosition.dx < 0 ? DragDirection.left : DragDirection.right;
+      final direction = _itemPosition.dx < 0 ? DragDirection.left : DragDirection.right;
 
-    _animateItem(
-      widget.settings,
-      DraggableSliderItemSettings(
-        angle: direction == DragDirection.right
-            ? Vector3(0, 0, 0.6)
-            : Vector3(0, 0, -0.6),
-        position: targetPosition,
-      ),
-    )?.whenComplete(() => widget.onReleased!(widget.key));
+      _animateItem(
+        widget.settings,
+        DraggableSliderItemSettings(
+          angle: direction == DragDirection.right
+              ? Vector3(0, 0, 0.6)
+              : Vector3(0, 0, -0.6),
+          position: targetPosition,
+        ),
+      )?.whenComplete(() => widget.onReleased!(widget.key));
 
-    if (widget.onRelease != null) {
-      widget.onRelease!(widget.key, direction);
+      if (widget.onRelease != null) {
+        widget.onRelease!(widget.key, direction);
+      }
     }
+    catch (e) {}
   }
 
   void onDragging(DragUpdateDetails details) {
-    if (!draggable) return;
-    if (_itemGlobalPosition == null) {
-      final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
-      _itemGlobalPosition = renderBox?.localToGlobal(Offset.zero);
-      _itemGlobalPosition ??= Offset.zero;
+    try {
+      if (!draggable) return;
+      if (_itemGlobalPosition == null) {
+        final renderBox = key.currentContext?.findRenderObject() as RenderBox?;
+        _itemGlobalPosition = renderBox?.localToGlobal(Offset.zero);
+        _itemGlobalPosition ??= Offset.zero;
+      }
+
+      _itemPosition += details.delta;
+
+      _itemPosition = Offset(
+        _itemPosition.dx.clamp(
+          -_itemGlobalPosition!.dx,
+          _screenSize.width - _itemGlobalPosition!.dx - _widgetSize.width,
+        ),
+        _itemPosition.dy.clamp(
+          -_itemGlobalPosition!.dy,
+          _screenSize.height - _itemGlobalPosition!.dy - _widgetSize.height,
+        ),
+      );
+
+      setState(() {});
     }
-
-    _itemPosition += details.delta;
-
-    _itemPosition = Offset(
-      _itemPosition.dx.clamp(
-        -_itemGlobalPosition!.dx,
-        _screenSize.width - _itemGlobalPosition!.dx - _widgetSize.width,
-      ),
-      _itemPosition.dy.clamp(
-        -_itemGlobalPosition!.dy,
-        _screenSize.height - _itemGlobalPosition!.dy - _widgetSize.height,
-      ),
-    );
-
-    setState(() {});
+    catch (e) {}
   }
 
   Matrix4 _computeTransformMatrix(DraggableSliderItemSettings settings) {
